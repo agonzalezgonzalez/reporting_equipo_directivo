@@ -133,6 +133,12 @@ def transformar_datos(datos: dict, config: dict) -> pd.DataFrame:
     col_articulo = df.columns[1]  # Col B = Artículo
     df = df[df[col_articulo].notna() & (df[col_articulo].astype(str).str.strip() != "")]
     df = df.reset_index(drop=True)
+    # Limpiar espacios en todas las columnas de texto
+    for col in df.columns:
+        if df[col].dtype == object:
+            df[col] = df[col].apply(
+                lambda x: str(x).strip() if pd.notna(x) else x
+            )
 
     # Mapear columnas del ERP a nombres estándar
     col_map = {
@@ -172,6 +178,10 @@ def transformar_datos(datos: dict, config: dict) -> pd.DataFrame:
     ]
     for col in num_cols:
         if col in df.columns:
+            df[col] = df[col].apply(
+                lambda x: str(x).replace(",", ".").replace(" ", "").strip()
+                if pd.notna(x) and str(x).strip() != "" else "0"
+            )
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
     # Convertir fechas

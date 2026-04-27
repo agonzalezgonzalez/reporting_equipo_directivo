@@ -73,10 +73,10 @@ n_ok = len(df) - len(df_alertas["articulo"].unique()) if not df_alertas.empty el
 cobertura_media = df["semanas_stock"].dropna().mean()
 
 k1, k2, k3, k4 = st.columns(4)
-k1.metric("🔴 Alertas Críticas", n_crit)
-k2.metric("🟡 Alertas Riesgo", n_risk)
-k3.metric("🟢 Stock Correcto", max(0, n_ok))
-k4.metric("📦 Cobertura Media", f"{cobertura_media:.1f} sem" if pd.notna(cobertura_media) else "N/D")
+k1.metric("🔴 Artículos Críticos", n_crit, help="Artículos con al menos una alerta crítica (A1–A4)")
+k2.metric("🟡 Artículos en Riesgo", n_risk, help="Artículos con al menos una alerta de riesgo (A5–A7)")
+k3.metric("🟢 Stock Correcto", max(0, n_ok), help="Artículos sin ninguna alerta activa")
+k4.metric("📦 Cobertura Media", f"{cobertura_media:.1f} sem" if pd.notna(cobertura_media) else "N/D", help="Media de semanas de stock de todos los artículos")
 
 st.divider()
 
@@ -100,30 +100,34 @@ df_tabla = df[[
 ]].copy()
 
 # Añadir columna de estado
+# Normalizar artículos para que la comparación funcione aunque haya diferencias de espacios
+df_tabla["_art_norm"] = df_tabla["articulo"].astype(str).str.strip()
+
 if not df_alertas.empty:
-    arts_criticos = set(df_alertas[df_alertas["nivel"] == "CRITICA"]["articulo"])
-    arts_riesgo = set(df_alertas[df_alertas["nivel"] == "RIESGO"]["articulo"])
-    alertas_por_art = df_alertas.groupby("articulo")["alerta_id"].apply(
+    df_alertas["_art_norm"] = df_alertas["articulo"].astype(str).str.strip()
+    arts_criticos = set(df_alertas[df_alertas["nivel"] == "CRITICA"]["_art_norm"])
+    arts_riesgo = set(df_alertas[df_alertas["nivel"] == "RIESGO"]["_art_norm"])
+    alertas_por_art = df_alertas.groupby("_art_norm")["alerta_id"].apply(
         lambda x: ", ".join(sorted(x.unique()))
     ).to_dict()
 else:
     arts_criticos, arts_riesgo, alertas_por_art = set(), set(), {}
 
-df_tabla["estado"] = df_tabla["articulo"].apply(
+df_tabla["estado"] = df_tabla["_art_norm"].apply(
     lambda x: "🔴 Crítico" if x in arts_criticos
     else ("🟡 Riesgo" if x in arts_riesgo else "🟢 OK")
 )
-df_tabla["alertas"] = df_tabla["articulo"].map(
+df_tabla["alertas"] = df_tabla["_art_norm"].map(
     lambda x: alertas_por_art.get(x, "—")
 )
 
 # Aplicar filtros
 if filtro_estado == "Solo críticos":
-    df_tabla = df_tabla[df_tabla["articulo"].isin(arts_criticos)]
+    df_tabla = df_tabla[df_tabla["_art_norm"].isin(arts_criticos)]
 elif filtro_estado == "Solo riesgo":
-    df_tabla = df_tabla[df_tabla["articulo"].isin(arts_riesgo)]
+    df_tabla = df_tabla[df_tabla["_art_norm"].isin(arts_riesgo)]
 elif filtro_estado == "Solo OK":
-    df_tabla = df_tabla[~df_tabla["articulo"].isin(arts_criticos | arts_riesgo)]
+    df_tabla = df_tabla[~df_tabla["_art_norm"].isin(arts_criticos | arts_riesgo)]
 
 if filtro_prov != "Todos":
     df_tabla = df_tabla[df_tabla["nombre_proveedor"] == filtro_prov]
@@ -139,7 +143,7 @@ if filtro_busqueda:
 orden = {"🔴 Crítico": 0, "🟡 Riesgo": 1, "🟢 OK": 2}
 df_tabla["_orden"] = df_tabla["estado"].map(orden)
 df_tabla = df_tabla.sort_values(["_orden", "semanas_stock"], ascending=[True, True])
-df_tabla = df_tabla.drop(columns=["_orden"])
+df_tabla = df_tabla.drop(columns=["_orden", "_art_norm"])
 
 st.dataframe(
     df_tabla.rename(columns={

@@ -46,7 +46,11 @@ if df is None:
 opciones = df.apply(lambda r: f"{r['articulo']} — {r['denominacion']}", axis=1).tolist()
 seleccion = st.selectbox("Selecciona un artículo", opciones)
 art_codigo = seleccion.split(" — ")[0].strip()
-row = df[df["articulo"] == art_codigo].iloc[0]
+df_match = df[df["articulo"].str.strip() == art_codigo]
+if df_match.empty:
+    st.error(f"No se encontraron datos para el artículo '{art_codigo}'.")
+    st.stop()
+row = df_match.iloc[0]
 
 st.divider()
 

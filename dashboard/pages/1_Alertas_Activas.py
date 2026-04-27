@@ -42,9 +42,9 @@ c1, c2, c3 = st.columns(3)
 n_crit = len(df_alertas[df_alertas["nivel"] == "CRITICA"])
 n_risk = len(df_alertas[df_alertas["nivel"] == "RIESGO"])
 n_info = len(df_alertas[df_alertas["nivel"] == "INFORMATIVA"])
-c1.metric("🔴 Críticas", n_crit)
-c2.metric("🟡 Riesgo", n_risk)
-c3.metric("🔵 Informativas", n_info)
+c1.metric("🔴 Alertas Críticas", n_crit, help="Total de alertas críticas activas (un artículo puede tener varias)")
+c2.metric("🟡 Alertas Riesgo", n_risk, help="Total de alertas de riesgo activas")
+c3.metric("🔵 Alertas Informativas", n_info, help="Total de alertas informativas activas")
 
 st.divider()
 
