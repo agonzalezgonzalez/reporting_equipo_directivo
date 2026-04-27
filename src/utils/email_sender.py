@@ -115,6 +115,7 @@ def build_alert_email_html(
           <th style="padding: 8px; text-align: left;">Alerta</th>
           <th style="padding: 8px; text-align: left;">Artículo</th>
           <th style="padding: 8px; text-align: left;">Denominación</th>
+          <th style="padding: 8px; text-align: left;">Proveedor</th>
           <th style="padding: 8px; text-align: left;">Valor</th>
           <th style="padding: 8px; text-align: left;">Acción</th>
         </tr>
@@ -138,6 +139,7 @@ def _alert_row(alerta: dict, bg_color: str, text_color: str) -> str:
       </td>
       <td style="padding: 6px 8px; border-bottom: 1px solid #ddd;">{alerta.get('articulo', '')}</td>
       <td style="padding: 6px 8px; border-bottom: 1px solid #ddd;">{alerta.get('denominacion', '')}</td>
+      <td style="padding: 6px 8px; border-bottom: 1px solid #ddd;">{alerta.get('proveedor', '')}</td>
       <td style="padding: 6px 8px; border-bottom: 1px solid #ddd;">{alerta.get('valor', '')}</td>
       <td style="padding: 6px 8px; border-bottom: 1px solid #ddd;">{alerta.get('action', '')}</td>
     </tr>
