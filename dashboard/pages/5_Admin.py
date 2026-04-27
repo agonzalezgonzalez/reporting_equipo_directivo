@@ -11,6 +11,11 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import streamlit as st
 import yaml
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from styles import aplicar_estilos, mostrar_logo_sidebar
+aplicar_estilos()
+mostrar_logo_sidebar()
+
 from src.utils.config_loader import load_config, save_config, CONFIG_PATH
 
 st.title("⚙️ Panel de Administración")

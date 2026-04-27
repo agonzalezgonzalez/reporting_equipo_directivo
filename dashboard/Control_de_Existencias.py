@@ -18,6 +18,9 @@ import plotly.graph_objects as go
 from src.utils.config_loader import load_config, is_page_enabled
 from src.etl.etl_existencias import extraer_datos_erp, transformar_datos
 from src.alerts.rules_existencias import evaluar_alertas
+from styles import aplicar_estilos, mostrar_logo_sidebar
+aplicar_estilos()
+mostrar_logo_sidebar()
 
 # --- Configuración de página ---
 st.set_page_config(
@@ -25,8 +28,8 @@ st.set_page_config(
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
+    
 )
-
 
 @st.cache_data(ttl=300)
 def cargar_datos():

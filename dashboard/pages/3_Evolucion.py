@@ -13,6 +13,11 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from styles import aplicar_estilos, mostrar_logo_sidebar
+aplicar_estilos()
+mostrar_logo_sidebar()
+
 from src.utils.config_loader import load_config, is_page_enabled
 
 config = load_config()

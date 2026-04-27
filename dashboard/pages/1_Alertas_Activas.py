@@ -13,6 +13,11 @@ from src.utils.config_loader import load_config, is_page_enabled
 from src.etl.etl_existencias import extraer_datos_erp, transformar_datos
 from src.alerts.rules_existencias import evaluar_alertas
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from styles import aplicar_estilos, mostrar_logo_sidebar
+aplicar_estilos()
+mostrar_logo_sidebar()
+
 config = load_config()
 if not is_page_enabled(config, "alertas_activas"):
     st.warning("Esta página está desactivada desde el panel de administración.")
