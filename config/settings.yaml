@@ -117,15 +117,15 @@ notifications:
     # Credenciales en .env (TWILIO_SID, TWILIO_TOKEN, TWILIO_FROM)
   recipients:
     - name: "Director General"
-      email: "director@empresa.com"
-      phone: "+34600000000"
-      levels: [CRITICA]
+      email: "alvarogonzalezgonzalez95@gmail.com"
+      phone: "+34639569705"
+      levels: [CRITICA, RIESGO, INFORMATIVA]
       channels: [email]
       active: true
     - name: "Resp. Compras"
-      email: "compras@empresa.com"
-      phone: "+34600000001"
-      levels: [CRITICA, RIESGO]
+      email: "susana@embutidoscarchelejo.es"
+      phone: "+34608661373"
+      levels: [CRITICA, RIESGO, INFORMATIVA]
       channels: [email]
       active: true
     - name: "Resp. Almacén"
@@ -133,7 +133,7 @@ notifications:
       phone: ""
       levels: [CRITICA, RIESGO, INFORMATIVA]
       channels: [email]
-      active: true
+      active: false
 
 # --- Páginas del dashboard ---
 pages:
