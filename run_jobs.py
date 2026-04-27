@@ -29,6 +29,7 @@ from src.utils.persistence import (
 )
 from src.etl.etl_existencias import extraer_datos_erp, transformar_datos
 from src.alerts.rules_existencias import evaluar_alertas
+from src.etl.import_export import volcar_export, hay_export_nuevo
 
 logger = setup_logger("run_jobs")
 
@@ -59,6 +60,21 @@ def main():
     else:
         raw_dir = PROJECT_ROOT / config["paths"]["raw_data"]
         excel_path = raw_dir / config["paths"]["excel_filename"]
+        # 2b. Volcar export.xlsx si existe uno nuevo
+        export_path = raw_dir / config["paths"].get("export_filename", "export.xlsx")
+        if hay_export_nuevo(export_path, excel_path):
+            try:
+                volcado_ok = volcar_export(export_path, excel_path)
+                if volcado_ok:
+                    logger.info("Export volcado correctamente a HOJA EXISTENCIAS")
+                else:
+                    logger.warning("No se pudo volcar el export. Se procesará el existente.")
+            except Exception as e:
+                logger.error(f"Error en volcado de export: {e}")
+        elif export_path.exists():
+            logger.info("Export.xlsx no es más reciente. Se procesa el existente.")
+        else:
+            logger.info("Sin export.xlsx. Se procesa EXISTENCIAS_MINIMO.xlsx directamente.")
 
     if not excel_path.exists():
         logger.error(f"Excel no encontrado: {excel_path}")

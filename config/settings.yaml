@@ -9,6 +9,7 @@ paths:
   raw_data: "data/raw"
   processed_data: "data/processed"
   excel_filename: "EXISTENCIAS_MINIMO.xlsx"
+  export_filename: "export.xlsx"
 
 # --- Parámetros operativos ---
 params:
