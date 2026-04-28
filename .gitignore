@@ -1,0 +1,11 @@
+.env
+.env.local
+.env.*.local
+*.pyc
+__pycache__/
+.venv/
+venv/
+config/settings.yaml.bak
+data/raw/*.xlsx
+data/processed/*.csv
+*.log

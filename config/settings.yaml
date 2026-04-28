@@ -1,0 +1,155 @@
+# ============================================================
+# CONFIGURACIÓN CENTRAL - reporting_equipo_directivo
+# Este archivo es la fuente de verdad para todo el sistema.
+# Puede editarse manualmente o desde el panel de Administración.
+# ============================================================
+
+# --- Rutas de datos ---
+paths:
+  raw_data: "data/raw"
+  processed_data: "data/processed"
+  excel_filename: "EXISTENCIAS_MINIMO.xlsx"
+  export_filename: "export.xlsx"
+
+# --- Parámetros operativos ---
+params:
+  ventana_riesgo_dias: 24
+  umbral_agotamiento_dias: 30
+  umbral_cobertura_larga_dias: 60
+  umbral_semanas_stock_critico: 1.0
+  umbral_desviacion_consumo: 0.80
+  rappel_saeco: 0.11
+  rappel_xuber: 0.06
+  codigo_base_proveedor: 400000000
+
+# --- Retención de datos históricos (semanas) ---
+retencion:
+  historico_stock: 52
+  historico_alertas: 52
+  historico_consumo: 52
+  historico_pedidos: 104
+  log_notificaciones: 52
+
+# --- Configuración de alertas ---
+alerts:
+  A1:
+    nombre: "Stock < 1 semana"
+    nivel: "CRITICA"
+    dashboard_enabled: true
+    notification_enabled: true
+    channels: [email]
+    action: "Pedir urgente"
+  A2:
+    nombre: "Rotura de stock"
+    nivel: "CRITICA"
+    dashboard_enabled: true
+    notification_enabled: true
+    channels: [email]
+    action: "Confirmar entrega"
+  A3:
+    nombre: "Bajo mínimo"
+    nivel: "CRITICA"
+    dashboard_enabled: true
+    notification_enabled: true
+    channels: [email]
+    action: "Verificar pedido"
+  A4:
+    nombre: "Agotamiento < 30 días"
+    nivel: "CRITICA"
+    dashboard_enabled: true
+    notification_enabled: true
+    channels: [email]
+    action: "Acelerar entrega"
+  A5:
+    nombre: "Pedido sin confirmar"
+    nivel: "RIESGO"
+    dashboard_enabled: true
+    notification_enabled: true
+    channels: [email]
+    action: "Confirmar recepción"
+  A6:
+    nombre: "En tránsito"
+    nivel: "RIESGO"
+    dashboard_enabled: true
+    notification_enabled: false
+    channels: [email]
+    action: "Seguir pedido"
+  A7:
+    nombre: "Desviación consumo ≥ 80%"
+    nivel: "RIESGO"
+    dashboard_enabled: true
+    notification_enabled: true
+    channels: [email]
+    action: "Revisar escandallo"
+  A8:
+    nombre: "Sin consumo configurado"
+    nivel: "INFORMATIVA"
+    dashboard_enabled: true
+    notification_enabled: false
+    channels: [email]
+    action: "Configurar consumo"
+  A9:
+    nombre: "Cambio pendiente"
+    nivel: "INFORMATIVA"
+    dashboard_enabled: true
+    notification_enabled: false
+    channels: [email]
+    action: "Revisar observación"
+  A10:
+    nombre: "Sobreestimación escandallo"
+    nivel: "INFORMATIVA"
+    dashboard_enabled: true
+    notification_enabled: false
+    channels: [email]
+    action: "Revisar escandallo"
+
+# --- Notificaciones ---
+notifications:
+  smtp:
+    host: "smtp.gmail.com"          # Cambiar a servidor corporativo en producción
+    port: 587
+    use_tls: true
+    username: ""                     # Se lee de .env (SMTP_USERNAME)
+    password: ""                     # Se lee de .env (SMTP_PASSWORD)
+    from_address: ""                 # Se lee de .env (SMTP_FROM)
+  whatsapp:
+    provider: "twilio"              # twilio | business_api
+    enabled: false
+    # Credenciales en .env (TWILIO_SID, TWILIO_TOKEN, TWILIO_FROM)
+  recipients:
+    - name: "Director General"
+      email: "alvarogonzalezgonzalez95@gmail.com"
+      phone: "+34639569705"
+      levels: [CRITICA, RIESGO, INFORMATIVA]
+      channels: [email]
+      active: true
+    - name: "Resp. Compras"
+      email: "susana@embutidoscarchelejo.es"
+      phone: "+34608661373"
+      levels: [CRITICA, RIESGO, INFORMATIVA]
+      channels: [email]
+      active: true
+    - name: "Resp. Almacén"
+      email: "almacen@empresa.com"
+      phone: ""
+      levels: [CRITICA, RIESGO, INFORMATIVA]
+      channels: [email]
+      active: false
+
+# --- Páginas del dashboard ---
+pages:
+  panel_general:
+    enabled: true
+    label: "📊 Panel General"
+  alertas_activas:
+    enabled: true
+    label: "🚨 Alertas Activas"
+  detalle_articulo:
+    enabled: true
+    label: "🔍 Detalle Artículo"
+  evolucion:
+    enabled: true
+    label: "📈 Evolución"
+  proveedores:
+    enabled: true
+    label: "🏭 Proveedores"
