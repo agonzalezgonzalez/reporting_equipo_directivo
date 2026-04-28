@@ -1,11 +1,33 @@
 """
 Orquestador principal del sistema de reporting.
-Ejecuta el ETL, evalúa alertas, persiste datos y envía notificaciones.
-Diseñado para ser ejecutado vía cron/Task Scheduler.
+
+Module: run_jobs (raíz del proyecto)
+Purpose: Ejecuta el flujo completo de procesamiento de datos en secuencia:
+    importación del export → ETL → evaluación de alertas → persistencia
+    de históricos → envío de notificaciones → retención de datos.
+    Cada paso se ejecuta en un bloque try/except independiente para que
+    el fallo de un paso no impida la ejecución de los demás.
+Input: data/raw/export.xlsx (opcional), data/raw/EXISTENCIAS_MINIMO.xlsx
+Output: data/processed/ (Excel procesado + 5 archivos CSV históricos)
+Config: config/settings.yaml + .env
+Used by: cron (Linux) o Programador de Tareas (Windows) para ejecución
+    automática. También puede ejecutarse manualmente.
 
 Uso:
     python run_jobs.py
     python run_jobs.py --excel data/raw/EXISTENCIAS_MINIMO.xlsx
+
+Flujo de ejecución (11 pasos):
+    1. Cargar configuración (settings.yaml + .env)
+    2. Comprobar si hay export.xlsx nuevo (comparación fecha interna A2)
+    2b. Si hay export nuevo, volcar a HOJA EXISTENCIAS
+    3. Extraer datos del ERP (todas las hojas relevantes)
+    4. Transformar datos (cruces, columnas calculadas)
+    5. Evaluar alertas (10 reglas A1–A10)
+    6. Persistir datos históricos (4 archivos CSV)
+    7. Guardar Excel procesado para el dashboard
+    8. Enviar notificaciones por email (si hay alertas habilitadas)
+    9. Aplicar retención de datos (limpieza de registros antiguos)
 """
 import sys
 import argparse
@@ -35,6 +57,28 @@ logger = setup_logger("run_jobs")
 
 
 def main():
+    """Punto de entrada principal del orquestador.
+
+    Parsea argumentos de línea de comandos, carga la configuración y
+    ejecuta los 9 pasos del flujo en secuencia. Cada paso tiene su
+    propio bloque try/except para garantizar que un fallo individual
+    no detiene el resto del proceso.
+
+    El argumento --excel permite especificar un Excel alternativo,
+    útil para reprocesar ficheros específicos sin tocar la configuración.
+    Si no se especifica, usa la ruta definida en settings.yaml.
+
+    Dependencies:
+        - Carga: src.utils.config_loader.load_config()
+        - Paso 1-2: src.etl.import_export (hay_export_nuevo, volcar_export)
+        - Paso 3: src.etl.etl_existencias.extraer_datos_erp()
+        - Paso 4: src.etl.etl_existencias.transformar_datos()
+        - Paso 5: src.alerts.rules_existencias.evaluar_alertas()
+        - Paso 6: src.utils.persistence (guardar_historico_*)
+        - Paso 7: pandas.DataFrame.to_excel()
+        - Paso 8: _enviar_notificaciones() → src.utils.email_sender
+        - Paso 9: src.utils.persistence.aplicar_retencion()
+    """
     parser = argparse.ArgumentParser(description="Orquestador de reporting")
     parser.add_argument(
         "--excel", type=str, default=None,
@@ -144,8 +188,27 @@ def main():
 
 
 def _enviar_notificaciones(df_alertas, config, output_dir):
-    """Envía notificaciones por email según configuración."""
-    # Filtrar solo alertas con notificación habilitada
+    """Envía notificaciones por email según la configuración de destinatarios.
+
+    Flujo de envío:
+    1. Filtra las alertas que tienen notification_enabled=True.
+    2. Si hay alertas críticas, envía un email completo (críticas + riesgo + info)
+       a los destinatarios configurados para el nivel CRITICA.
+    3. Si hay alertas de riesgo, envía un email (solo riesgo + info) a los
+       destinatarios de RIESGO que NO hayan recibido ya el email de críticas.
+    4. Cada envío se registra en log_notificaciones.csv con su resultado.
+
+    Args:
+        df_alertas: DataFrame de alertas de evaluar_alertas().
+        config: Diccionario de configuración con notifications y alerts.
+        output_dir: Directorio de salida para el log de notificaciones.
+
+    Dependencies:
+        - Llamada por: main() (paso 8, solo si hay alertas)
+        - Usa: get_active_recipients(), build_alert_email_html(), send_email(),
+          registrar_notificacion()
+        - Lee: config.notifications.smtp, config.notifications.recipients
+    """
     df_notif = df_alertas[df_alertas["notification_enabled"] == True]
     if df_notif.empty:
         logger.info("Sin alertas con notificación habilitada")
@@ -176,10 +239,9 @@ def _enviar_notificaciones(df_alertas, config, output_dir):
                 "" if success else "Error en envío SMTP"
             )
 
-    # Email para alertas de riesgo (si hay destinatarios configurados)
+    # Email para alertas de riesgo
     if alertas_riesgo:
         recipients_risk = get_active_recipients(config, "RIESGO", "email")
-        # Filtrar los que ya recibieron las críticas
         already_sent = set(r["email"] for r in get_active_recipients(config, "CRITICA", "email"))
         risk_only = [r for r in recipients_risk if r.get("email") not in already_sent]
 

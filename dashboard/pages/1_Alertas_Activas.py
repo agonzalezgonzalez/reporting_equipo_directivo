@@ -1,6 +1,28 @@
 """
-Página 2: Alertas Activas
-Detalle de todas las alertas agrupadas por criticidad con acciones recomendadas.
+Página 2: Alertas Activas.
+
+Module: dashboard.pages.1_Alertas_Activas
+Purpose: Detalle operativo de todas las alertas activas, agrupadas por nivel
+    de criticidad (CRITICA, RIESGO, INFORMATIVA). Orientada al departamento
+    de compras para actuar sobre cada alerta con acciones recomendadas.
+    También muestra el historial de notificaciones enviadas.
+Input: data/raw/EXISTENCIAS_MINIMO.xlsx (lectura en tiempo real vía ETL),
+    data/processed/log_notificaciones.csv (historial)
+Output: Interfaz web Streamlit (página de alertas)
+Config: config/settings.yaml (alerts, pages.alertas_activas)
+Used by: Menú lateral del dashboard (navegación Streamlit Multipage)
+
+Diferencia con Panel General:
+    - Panel General cuenta ARTÍCULOS únicos afectados por nivel
+    - Esta página cuenta ALERTAS totales (un artículo con 3 alertas = 3)
+    Los tooltips de los KPIs lo explican al usuario.
+
+Componentes visuales:
+    1. KPIs: Total alertas críticas, riesgo e informativas
+    2. Filtros: nivel, tipo alerta, proveedor, búsqueda
+    3. Tablas expandibles por grupo (críticas expandidas por defecto)
+       → Columnas: Alerta, Artículo, Denominación, Valor, Umbral, Acción, Proveedor
+    4. Historial de notificaciones (últimas 20 de log_notificaciones.csv)
 """
 import sys
 from pathlib import Path
@@ -28,6 +50,15 @@ st.title("🚨 Alertas Activas")
 
 @st.cache_data(ttl=300)
 def cargar_alertas():
+    """Carga el Excel del ERP y ejecuta ETL + evaluación de alertas.
+
+    Returns:
+        pd.DataFrame con las alertas disparadas, o None si el Excel no existe.
+
+    Dependencies:
+        - Usa: extraer_datos_erp(), transformar_datos(), evaluar_alertas()
+        - Ruta Excel: config.paths.raw_data / config.paths.excel_filename
+    """
     raw_dir = PROJECT_ROOT / config["paths"]["raw_data"]
     excel_path = raw_dir / config["paths"]["excel_filename"]
     if not excel_path.exists():

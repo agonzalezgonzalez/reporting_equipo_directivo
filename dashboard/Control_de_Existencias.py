@@ -1,6 +1,28 @@
 """
 Panel General — Página principal del dashboard.
-Visión ejecutiva con KPIs, tabla de alertas y cobertura global.
+
+Module: dashboard.Control_de_Existencias
+Purpose: Vista ejecutiva para dirección. Muestra el estado global del stock
+    con KPIs de artículos afectados, tabla filtrable de artículos con su
+    estado de alerta, gráfico de cobertura por artículo, distribución de
+    alertas por tipo y lista de pedidos en tránsito.
+Input: data/raw/EXISTENCIAS_MINIMO.xlsx (lectura en tiempo real vía ETL)
+Output: Interfaz web Streamlit (página principal del dashboard)
+Config: config/settings.yaml (todas las secciones)
+Used by: Punto de entrada del dashboard (streamlit run Control_de_Existencias.py)
+
+Componentes visuales:
+    1. KPIs: Artículos Críticos, Artículos en Riesgo, Stock Correcto, Cobertura Media
+       → Cuentan artículos únicos, no alertas individuales (a diferencia de
+         pages/1_Alertas_Activas.py que cuenta alertas totales)
+    2. Tabla de artículos: filtrable por estado, proveedor y búsqueda libre
+       → Normaliza artículos con .str.strip() para evitar desajustes de espacios
+    3. Gráfico cobertura: barras coloreadas (rojo < 1 sem, ámbar 1-3, verde > 3)
+    4. Distribución alertas: barras horizontales por tipo (A1–A10)
+    5. Pedidos en tránsito: tabla con artículo, cantidad, proveedor
+
+Nota sobre cache: @st.cache_data(ttl=300) cachea los datos durante 5 minutos.
+    Para forzar recarga, usar el botón de Streamlit o limpiar cache desde Admin.
 """
 import sys
 from pathlib import Path
@@ -33,7 +55,25 @@ st.set_page_config(
 
 @st.cache_data(ttl=300)
 def cargar_datos():
-    """Carga y procesa los datos. Cache de 5 minutos."""
+    """Carga el Excel del ERP, ejecuta el ETL y evalúa las alertas.
+
+    Función cacheada con TTL de 5 minutos. Toda la cadena de procesamiento
+    (extracción → transformación → evaluación de alertas) se ejecuta en una
+    sola llamada para aprovechar el cache de Streamlit.
+
+    Returns:
+        Tupla (df, df_alertas, config):
+        - df (pd.DataFrame | None): DataFrame procesado con todas las columnas
+          calculadas. None si el Excel no existe.
+        - df_alertas (pd.DataFrame | None): DataFrame de alertas disparadas.
+          None si el Excel no existe.
+        - config (dict): Configuración cargada.
+
+    Dependencies:
+        - Usa: load_config(), extraer_datos_erp(), transformar_datos(),
+          evaluar_alertas()
+        - Ruta Excel: config.paths.raw_data / config.paths.excel_filename
+    """
     config = load_config()
     raw_dir = PROJECT_ROOT / config["paths"]["raw_data"]
     excel_path = raw_dir / config["paths"]["excel_filename"]

@@ -1,19 +1,51 @@
 """
 Estilos corporativos compartidos por todas las páginas del dashboard.
-Compatibles con modo claro y modo oscuro de Streamlit.
+
+Module: dashboard.styles
+Purpose: Inyecta CSS personalizado con la identidad visual de Embutidos
+    Carchelejo en todas las páginas de Streamlit. Compatible con modo
+    claro y modo oscuro. También gestiona la visualización del logo
+    corporativo en el sidebar.
+Input: dashboard/assets/logo.png (imagen del logo)
+Output: Estilos CSS inyectados vía st.markdown + logo en sidebar
+Config: Ninguna (los colores están hardcodeados como variables CSS)
+Used by: Todas las páginas del dashboard (importan aplicar_estilos
+    y mostrar_logo_sidebar)
+
+Identidad visual:
+    - Color principal (acento): #F54927 (rojo corporativo)
+    - Fondo claro: #FFFFFF / Fondo oscuro: #0E1117
+    - Sidebar: #1A1A1A (ambos modos)
+    - Tipografía: Segoe UI, Roboto, Helvetica Neue, Arial
+
+Mecanismo de temas:
+    Streamlit aplica [data-theme="light"] o [data-theme="dark"] al DOM.
+    Los estilos usan custom properties CSS (var(--ec-*)) que cambian
+    automáticamente según el tema activo, sin intervención del usuario.
 """
 import streamlit as st
 
 
 def aplicar_estilos():
-    """Inyecta los estilos corporativos de Embutidos Carchelejo."""
+    """Inyecta los estilos corporativos de Embutidos Carchelejo.
+
+    Define variables CSS para ambos temas (claro y oscuro) y aplica
+    estilos a todos los componentes de Streamlit: sidebar, métricas,
+    títulos, botones, tabs, expanders, inputs, dataframes, links,
+    tooltips, toggles y alertas.
+
+    Debe llamarse al inicio de cada página, antes de cualquier
+    componente visual de Streamlit.
+
+    Dependencies:
+        - Llamada por: todas las páginas del dashboard
+        - Usa: st.markdown con unsafe_allow_html=True
+    """
     st.markdown(
         """
         <style>
         /* ============================================================
            VARIABLES DE COLOR POR TEMA
-           Streamlit aplica [data-theme="light"] o [data-theme="dark"]
-           al elemento raíz. Usamos eso para definir variables CSS.
            ============================================================ */
 
         [data-theme="light"],
@@ -58,147 +90,56 @@ def aplicar_estilos():
         html, body, [class*="css"] {
             font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
         }
-
-        .stApp {
-            background-color: var(--ec-bg-primary);
-        }
-
-        /* --- Sidebar --- */
-        section[data-testid="stSidebar"] {
-            background-color: var(--ec-bg-sidebar);
-        }
-        section[data-testid="stSidebar"] * {
-            color: var(--ec-text-sidebar) !important;
-        }
+        .stApp { background-color: var(--ec-bg-primary); }
+        section[data-testid="stSidebar"] { background-color: var(--ec-bg-sidebar); }
+        section[data-testid="stSidebar"] * { color: var(--ec-text-sidebar) !important; }
         section[data-testid="stSidebar"] .stSelectbox label,
-        section[data-testid="stSidebar"] .stTextInput label {
-            color: var(--ec-text-sidebar-muted) !important;
-        }
-
-        /* --- Métricas (KPIs) --- */
-        div[data-testid="stMetric"] {
-            background-color: var(--ec-metric-bg);
-            border: 1px solid var(--ec-border);
-            border-radius: 8px;
-            padding: 12px 16px;
-            border-left: 4px solid var(--ec-accent);
-        }
-        div[data-testid="stMetric"] label {
-            color: var(--ec-text-secondary) !important;
-            font-weight: 600 !important;
-        }
-        div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
-            color: var(--ec-text-primary) !important;
-            font-weight: 700 !important;
-        }
-
-        /* --- Títulos --- */
-        h1 {
-            color: var(--ec-text-primary) !important;
-            border-bottom: 3px solid var(--ec-accent);
-            padding-bottom: 8px;
-        }
-        h2, h3 {
-            color: var(--ec-text-secondary) !important;
-        }
-
-        /* --- Botones --- */
-        .stButton > button {
-            background-color: var(--ec-accent);
-            color: white !important;
-            border: none;
-            border-radius: 6px;
-            font-weight: 600;
-            transition: background-color 0.2s;
-        }
-        .stButton > button:hover {
-            background-color: var(--ec-accent-hover);
-            color: white !important;
-        }
-        .stButton > button[kind="primary"] {
-            background-color: var(--ec-accent);
-        }
-
-        /* --- Tabs / Expanders --- */
-        .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {
-            border-bottom-color: var(--ec-accent) !important;
-            color: var(--ec-accent) !important;
-        }
-        details[data-testid="stExpander"] summary {
-            color: var(--ec-text-primary) !important;
-        }
-        details[data-testid="stExpander"] summary:hover {
-            color: var(--ec-accent) !important;
-        }
-
-        /* --- Selectbox y inputs --- */
-        .stSelectbox > div > div,
-        .stTextInput > div > div > input {
-            border-color: var(--ec-border-light);
-            border-radius: 6px;
-            background-color: var(--ec-bg-secondary);
-            color: var(--ec-text-primary);
-        }
-        .stSelectbox > div > div:focus-within,
-        .stTextInput > div > div > input:focus {
-            border-color: var(--ec-accent) !important;
-            box-shadow: 0 0 0 1px var(--ec-accent) !important;
-        }
-
-        /* --- Divider --- */
-        hr {
-            border-color: var(--ec-border) !important;
-        }
-
-        /* --- Dataframe --- */
-        .stDataFrame {
-            border: 1px solid var(--ec-border);
-            border-radius: 8px;
-        }
-
-        /* --- Links --- */
-        a {
-            color: var(--ec-accent) !important;
-        }
-        a:hover {
-            color: var(--ec-accent-hover) !important;
-        }
-
-        /* --- Texto general (párrafos, labels) --- */
-        .stMarkdown, .stText, p, span, label {
-            color: var(--ec-text-primary);
-        }
-        .stCaption, [data-testid="stCaptionContainer"] {
-            color: var(--ec-text-muted) !important;
-        }
-
-        /* --- Tooltips de métricas --- */
-        div[data-testid="stMetric"] div[data-testid="stTooltipIcon"] {
-            color: var(--ec-text-muted) !important;
-        }
-
-        /* --- Toggle / Switch --- */
-        .stToggle label span {
-            color: var(--ec-text-primary) !important;
-        }
-
-        /* --- Expander contenido --- */
-        details[data-testid="stExpander"] div[data-testid="stExpanderDetails"] {
-            background-color: var(--ec-bg-secondary);
-            border-radius: 0 0 8px 8px;
-        }
-
-        /* --- Alertas de Streamlit (st.success, st.warning, st.error, st.info) --- */
-        .stAlert {
-            border-radius: 8px;
-        }
+        section[data-testid="stSidebar"] .stTextInput label { color: var(--ec-text-sidebar-muted) !important; }
+        div[data-testid="stMetric"] { background-color: var(--ec-metric-bg); border: 1px solid var(--ec-border); border-radius: 8px; padding: 12px 16px; border-left: 4px solid var(--ec-accent); }
+        div[data-testid="stMetric"] label { color: var(--ec-text-secondary) !important; font-weight: 600 !important; }
+        div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: var(--ec-text-primary) !important; font-weight: 700 !important; }
+        h1 { color: var(--ec-text-primary) !important; border-bottom: 3px solid var(--ec-accent); padding-bottom: 8px; }
+        h2, h3 { color: var(--ec-text-secondary) !important; }
+        .stButton > button { background-color: var(--ec-accent); color: white !important; border: none; border-radius: 6px; font-weight: 600; transition: background-color 0.2s; }
+        .stButton > button:hover { background-color: var(--ec-accent-hover); color: white !important; }
+        .stButton > button[kind="primary"] { background-color: var(--ec-accent); }
+        .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] { border-bottom-color: var(--ec-accent) !important; color: var(--ec-accent) !important; }
+        details[data-testid="stExpander"] summary { color: var(--ec-text-primary) !important; }
+        details[data-testid="stExpander"] summary:hover { color: var(--ec-accent) !important; }
+        .stSelectbox > div > div, .stTextInput > div > div > input { border-color: var(--ec-border-light); border-radius: 6px; background-color: var(--ec-bg-secondary); color: var(--ec-text-primary); }
+        .stSelectbox > div > div:focus-within, .stTextInput > div > div > input:focus { border-color: var(--ec-accent) !important; box-shadow: 0 0 0 1px var(--ec-accent) !important; }
+        hr { border-color: var(--ec-border) !important; }
+        .stDataFrame { border: 1px solid var(--ec-border); border-radius: 8px; }
+        a { color: var(--ec-accent) !important; }
+        a:hover { color: var(--ec-accent-hover) !important; }
+        .stMarkdown, .stText, p, span, label { color: var(--ec-text-primary); }
+        .stCaption, [data-testid="stCaptionContainer"] { color: var(--ec-text-muted) !important; }
+        div[data-testid="stMetric"] div[data-testid="stTooltipIcon"] { color: var(--ec-text-muted) !important; }
+        .stToggle label span { color: var(--ec-text-primary) !important; }
+        details[data-testid="stExpander"] div[data-testid="stExpanderDetails"] { background-color: var(--ec-bg-secondary); border-radius: 0 0 8px 8px; }
+        .stAlert { border-radius: 8px; }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
+
 def mostrar_logo_sidebar():
-    """Muestra el logo de la empresa en la parte superior del sidebar."""
+    """Muestra el logo corporativo en la parte superior del sidebar.
+
+    Lee el archivo dashboard/assets/logo.png, lo codifica en base64 y lo
+    inyecta como imagen HTML en el sidebar de Streamlit. El logo se centra
+    horizontalmente, se adapta al ancho del sidebar (máximo 80%) y tiene
+    una altura máxima de 80px para no ocupar demasiado espacio.
+
+    Si el archivo logo.png no existe, la función no hace nada (no muestra
+    error ni espacio vacío).
+
+    Dependencies:
+        - Llamada por: todas las páginas del dashboard
+        - Fichero: dashboard/assets/logo.png
+        - Usa: st.sidebar.markdown con unsafe_allow_html=True
+    """
     import base64
     from pathlib import Path
 

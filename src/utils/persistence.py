@@ -1,6 +1,30 @@
 """
 Módulo de persistencia de datos históricos.
-Gestiona la escritura, deduplicación y retención de los 5 almacenes CSV.
+
+Module: src.utils.persistence
+Purpose: Gestiona la escritura, deduplicación y retención de los 5 almacenes
+    CSV que alimentan los gráficos temporales y el historial del dashboard.
+    Cada ejecución del ETL (run_jobs.py) añade registros a estos archivos.
+Input: DataFrames procesados por el ETL y las alertas evaluadas
+Output: Archivos CSV en data/processed/ (append con deduplicación)
+Config: config/settings.yaml (sección retencion)
+Used by: run_jobs.py (pasos 6, 8, 9)
+
+Almacenes gestionados:
+    1. historico_stock.csv     — Foto semanal de stock por artículo
+    2. historico_alertas.csv   — Alertas disparadas por artículo y fecha
+    3. historico_consumo.csv   — Consumo real semanal por artículo
+    4. historico_pedidos.csv   — Pedidos con estado (EN_TRANSITO/RECIBIDO/RETRASADO)
+    5. log_notificaciones.csv  — Log de emails y WhatsApp enviados
+
+Deduplicación:
+    Clave (fecha, articulo) para stock, alertas y consumo.
+    Clave (numero_pedido, articulo) para pedidos.
+    Si ya existen registros con la misma clave, se sobreescriben (upsert).
+
+Retención:
+    Configurable en settings.yaml por almacén (default: 52 semanas para
+    stock/alertas/consumo/log, 104 semanas para pedidos).
 """
 import os
 import pandas as pd
@@ -36,7 +60,23 @@ LOG_NOTIFICACIONES_COLS = [
 
 
 def _get_or_create_csv(filepath: Path, columns: list) -> pd.DataFrame:
-    """Lee un CSV existente o crea un DataFrame vacío con las columnas indicadas."""
+    """Lee un CSV existente o crea un DataFrame vacío con las columnas indicadas.
+
+    Maneja el caso de arranque en frío (archivo no existe) y el caso de
+    archivo corrupto (error de lectura) creando un DataFrame vacío con
+    la estructura correcta.
+
+    Args:
+        filepath: Ruta al archivo CSV.
+        columns: Lista de nombres de columnas para el DataFrame vacío.
+
+    Returns:
+        DataFrame con los datos del CSV, o DataFrame vacío con las
+        columnas indicadas si el archivo no existe o está corrupto.
+
+    Dependencies:
+        - Llamada por: todas las funciones guardar_* y registrar_notificacion()
+    """
     if filepath.exists() and filepath.stat().st_size > 0:
         try:
             return pd.read_csv(filepath, dtype=str)
@@ -46,7 +86,26 @@ def _get_or_create_csv(filepath: Path, columns: list) -> pd.DataFrame:
 
 
 def guardar_historico_stock(df_procesado: pd.DataFrame, output_dir: Path) -> None:
-    """Append de la foto actual de stock al histórico, con deduplicación."""
+    """Registra la foto actual de stock de todos los artículos en el histórico.
+
+    Añade una fila por artículo con su estado actual de stock. Si ya existen
+    registros con la misma fecha + artículo (ejecución duplicada), los
+    sobreescribe para evitar duplicados.
+
+    Args:
+        df_procesado: DataFrame procesado por transformar_datos(). Se extraen:
+            fecha_actualizacion, semana_iso, articulo, denominacion,
+            existencia_real, stock_minimo, stock_maximo, stock_teorico,
+            consumo_escandallo, semanas_stock, pendiente_recibir,
+            nombre_proveedor/proveedor_habitual.
+        output_dir: Directorio de salida (data/processed/).
+
+    Dependencies:
+        - Llamada por: run_jobs.py (paso 6)
+        - Escribe: data/processed/historico_stock.csv
+        - Consumido por: dashboard/pages/3_Evolucion.py (gráficos temporales,
+          proyección, evolución cobertura)
+    """
     filepath = output_dir / "historico_stock.csv"
     df_hist = _get_or_create_csv(filepath, HISTORICO_STOCK_COLS)
 
@@ -72,7 +131,6 @@ def guardar_historico_stock(df_procesado: pd.DataFrame, output_dir: Path) -> Non
 
     df_new = pd.DataFrame(nuevos)
 
-    # Deduplicar: eliminar registros existentes con misma fecha+articulo
     if not df_hist.empty:
         df_hist = df_hist[~((df_hist["fecha"] == fecha) & (df_hist["articulo"].isin(df_new["articulo"])))]
 
@@ -82,7 +140,24 @@ def guardar_historico_stock(df_procesado: pd.DataFrame, output_dir: Path) -> Non
 
 
 def guardar_historico_alertas(df_alertas: pd.DataFrame, output_dir: Path) -> None:
-    """Append de alertas disparadas al histórico."""
+    """Registra las alertas disparadas en el histórico.
+
+    Añade una fila por cada alerta activa. La deduplicación elimina todas
+    las alertas previas de la misma fecha y artículo antes de insertar
+    las nuevas, permitiendo que los cambios de configuración de alertas
+    se reflejen correctamente.
+
+    Args:
+        df_alertas: DataFrame de alertas de evaluar_alertas(). Se extraen:
+            fecha, semana, articulo, alerta_id, nivel, valor, umbral.
+        output_dir: Directorio de salida (data/processed/).
+
+    Dependencies:
+        - Llamada por: run_jobs.py (paso 6)
+        - Escribe: data/processed/historico_alertas.csv
+        - Consumido por: dashboard/pages/3_Evolucion.py (mapa de calor,
+          ranking recurrencia), dashboard/pages/1_Alertas_Activas.py
+    """
     filepath = output_dir / "historico_alertas.csv"
     df_hist = _get_or_create_csv(filepath, HISTORICO_ALERTAS_COLS)
 
@@ -95,7 +170,6 @@ def guardar_historico_alertas(df_alertas: pd.DataFrame, output_dir: Path) -> Non
     df_new = df_alertas[["fecha", "semana", "articulo", "alerta_id", "nivel", "valor", "umbral"]].copy()
     df_new = df_new.astype(str)
 
-    # Deduplicar
     if not df_hist.empty:
         df_hist = df_hist[~((df_hist["fecha"] == fecha) & (df_hist["articulo"].isin(df_new["articulo"])))]
 
@@ -105,7 +179,20 @@ def guardar_historico_alertas(df_alertas: pd.DataFrame, output_dir: Path) -> Non
 
 
 def guardar_historico_consumo(df_procesado: pd.DataFrame, output_dir: Path) -> None:
-    """Append del consumo real semanal al histórico."""
+    """Registra el consumo real semanal de cada artículo en el histórico.
+
+    Args:
+        df_procesado: DataFrame procesado por transformar_datos(). Se extraen:
+            fecha_actualizacion, semana_iso, articulo, consumo_real_semana,
+            consumo_escandallo, desviacion_consumo.
+        output_dir: Directorio de salida (data/processed/).
+
+    Dependencies:
+        - Llamada por: run_jobs.py (paso 6)
+        - Escribe: data/processed/historico_consumo.csv
+        - Consumido por: dashboard/pages/2_Detalle_Articulo.py (gráfico consumo),
+          dashboard/pages/3_Evolucion.py (consumo real vs escandallo)
+    """
     filepath = output_dir / "historico_consumo.csv"
     df_hist = _get_or_create_csv(filepath, HISTORICO_CONSUMO_COLS)
 
@@ -134,17 +221,35 @@ def guardar_historico_consumo(df_procesado: pd.DataFrame, output_dir: Path) -> N
 
 
 def actualizar_historico_pedidos(df_procesado: pd.DataFrame, output_dir: Path) -> None:
-    """
-    Actualiza el histórico de pedidos:
-    - Inserta nuevos pedidos detectados.
-    - Marca como RECIBIDO los que desaparecen de pendientes.
+    """Actualiza el histórico de pedidos detectando nuevos y recepciones.
+
+    Lógica de estados:
+    1. Para cada pedido activo (pendiente_recibir > 0, numero_pedido válido):
+       - Si es nuevo (no existe en el histórico), se inserta como EN_TRANSITO
+         con fecha_estimada_entrega = fecha_pedido + (semanas_entrega × 7 días).
+       - Si ya existe, no se modifica.
+    2. Para pedidos previamente EN_TRANSITO que ya no aparecen con pendiente > 0:
+       - Se marca como RECIBIDO con fecha_recepcion_real = fecha de ejecución.
+       - Si fecha_recepcion_real > fecha_estimada_entrega, el estado pasa a RETRASADO.
+
+    Args:
+        df_procesado: DataFrame procesado por transformar_datos(). Se extraen:
+            numero_pedido, articulo, pendiente_recibir, fecha_ultimo_pedido,
+            semanas_entrega_prov, nombre_proveedor/proveedor_habitual,
+            fecha_actualizacion.
+        output_dir: Directorio de salida (data/processed/).
+
+    Dependencies:
+        - Llamada por: run_jobs.py (paso 6)
+        - Escribe: data/processed/historico_pedidos.csv
+        - Consumido por: dashboard/pages/2_Detalle_Articulo.py (timeline pedidos),
+          dashboard/pages/4_Proveedores.py (fiabilidad = % RECIBIDO a tiempo)
     """
     filepath = output_dir / "historico_pedidos.csv"
     df_hist = _get_or_create_csv(filepath, HISTORICO_PEDIDOS_COLS)
 
     fecha_hoy = df_procesado["fecha_actualizacion"].iloc[0].strftime("%Y-%m-%d")
 
-    # Pedidos activos en esta ejecución
     pedidos_actuales = set()
     for _, row in df_procesado.iterrows():
         num_pedido = str(row.get("numero_pedido", "")).strip()
@@ -153,7 +258,6 @@ def actualizar_historico_pedidos(df_procesado: pd.DataFrame, output_dir: Path) -
         if num_pedido and num_pedido != "0" and num_pedido != "nan" and pnd > 0:
             pedidos_actuales.add((num_pedido, art))
 
-            # Insertar si es nuevo
             if df_hist.empty or not ((df_hist["numero_pedido"] == num_pedido) & (df_hist["articulo"] == art)).any():
                 f_pedido = row.get("fecha_ultimo_pedido")
                 sem_ent = row.get("semanas_entrega_prov", 0)
@@ -174,7 +278,6 @@ def actualizar_historico_pedidos(df_procesado: pd.DataFrame, output_dir: Path) -
                 }])
                 df_hist = pd.concat([df_hist, nuevo], ignore_index=True)
 
-    # Marcar como RECIBIDO los que ya no están en tránsito
     if not df_hist.empty:
         for idx, row in df_hist.iterrows():
             if row["estado"] == "EN_TRANSITO":
@@ -182,7 +285,6 @@ def actualizar_historico_pedidos(df_procesado: pd.DataFrame, output_dir: Path) -
                 if key not in pedidos_actuales:
                     df_hist.at[idx, "estado"] = "RECIBIDO"
                     df_hist.at[idx, "fecha_recepcion_real"] = fecha_hoy
-                    # Comprobar retraso
                     f_est = row.get("fecha_estimada_entrega", "")
                     if f_est:
                         try:
@@ -200,7 +302,25 @@ def registrar_notificacion(
     asunto: str, n_criticas: int, n_riesgo: int, n_articulos: int,
     estado: str, error: str = ""
 ) -> None:
-    """Registra una notificación enviada en el log."""
+    """Registra una notificación enviada (o fallida) en el log.
+
+    Args:
+        output_dir: Directorio de salida (data/processed/).
+        canal: Canal usado ("EMAIL" | "WHATSAPP").
+        destinatarios: Lista de direcciones/teléfonos destinatarios.
+        asunto: Asunto del email o resumen del mensaje.
+        n_criticas: Número de alertas críticas incluidas.
+        n_riesgo: Número de alertas de riesgo incluidas.
+        n_articulos: Número de artículos afectados.
+        estado: Resultado del envío ("ENVIADO" | "ERROR").
+        error: Detalle del error si estado es "ERROR".
+
+    Dependencies:
+        - Llamada por: run_jobs.py (_enviar_notificaciones)
+        - Escribe: data/processed/log_notificaciones.csv
+        - Consumido por: dashboard/pages/1_Alertas_Activas.py
+          (historial de notificaciones)
+    """
     filepath = output_dir / "log_notificaciones.csv"
     df_log = _get_or_create_csv(filepath, LOG_NOTIFICACIONES_COLS)
 
@@ -221,7 +341,30 @@ def registrar_notificacion(
 
 
 def aplicar_retencion(output_dir: Path, config: dict) -> None:
-    """Elimina registros más antiguos que el periodo de retención configurado."""
+    """Elimina registros más antiguos que el periodo de retención configurado.
+
+    Recorre cada almacén histórico y elimina las filas cuya fecha es
+    anterior al límite calculado (fecha_actual - semanas_retención).
+    Solo modifica archivos que existen y que tienen registros a eliminar.
+
+    La columna de fecha varía por archivo:
+    - "fecha" para historico_stock, historico_alertas, historico_consumo
+    - "fecha_hora" para log_notificaciones
+    - "fecha_registro" para historico_pedidos
+
+    Args:
+        output_dir: Directorio donde están los CSV (data/processed/).
+        config: Diccionario de configuración. Se usa la sección 'retencion':
+            - historico_stock: 52 (semanas)
+            - historico_alertas: 52
+            - historico_consumo: 52
+            - historico_pedidos: 104
+            - log_notificaciones: 52
+
+    Dependencies:
+        - Llamada por: run_jobs.py (paso 9, al final de cada ejecución)
+        - Modifica: todos los CSV en data/processed/
+    """
     retencion = config.get("retencion", {})
     hoy = datetime.now()
 
