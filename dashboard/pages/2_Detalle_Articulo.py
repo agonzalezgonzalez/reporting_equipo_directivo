@@ -1,6 +1,32 @@
 """
-Página 3: Detalle por Artículo
-Ficha completa con stock, consumo, pedidos y alertas de un artículo concreto.
+Página 3: Detalle por Artículo.
+
+Module: dashboard.pages.2_Detalle_Articulo
+Purpose: Ficha completa de un artículo individual. Muestra su estado de
+    stock, alertas activas, datos del proveedor, posición visual de stock
+    (gauge), observaciones y consumo histórico semanal.
+Input: data/raw/EXISTENCIAS_MINIMO.xlsx (lectura en tiempo real vía ETL),
+    data/processed/historico_consumo.csv (gráfico de consumo histórico)
+Output: Interfaz web Streamlit (ficha de artículo)
+Config: config/settings.yaml (pages.detalle_articulo, paths)
+Used by: Menú lateral del dashboard. También se puede acceder desde otras
+    páginas seleccionando un artículo.
+
+Componentes visuales:
+    1. Selector de artículo (st.selectbox con código + denominación)
+    2. KPIs: Existencia Real, Cobertura, Stock Teórico, Pendiente Recibir
+    3. Columna izquierda: ficha de datos + gauge de posición de stock
+       → Gauge muestra existencia real (azul), stock teórico (verde),
+         mínimo (línea roja), máximo (línea gris)
+    4. Columna derecha: alertas activas del artículo + observaciones
+    5. Gráfico de consumo semanal histórico (barras) con línea de escandallo
+       → Requiere historico_consumo.csv (generado por run_jobs.py)
+       → Muestra las últimas 24 semanas disponibles
+
+Nota sobre búsqueda de artículo:
+    Se usa .str.strip() al comparar el código seleccionado con el DataFrame
+    para evitar errores IndexError por diferencias de espacios en blanco
+    entre el ERP y los datos procesados.
 """
 import sys
 from pathlib import Path
@@ -32,6 +58,16 @@ st.title("🔍 Detalle por Artículo")
 
 @st.cache_data(ttl=300)
 def cargar_datos():
+    """Carga el Excel del ERP y ejecuta ETL + evaluación de alertas.
+
+    Returns:
+        Tupla (df, df_alertas):
+        - df (pd.DataFrame | None): DataFrame procesado.
+        - df_alertas (pd.DataFrame | None): Alertas disparadas.
+
+    Dependencies:
+        - Usa: extraer_datos_erp(), transformar_datos(), evaluar_alertas()
+    """
     raw_dir = PROJECT_ROOT / config["paths"]["raw_data"]
     excel_path = raw_dir / config["paths"]["excel_filename"]
     if not excel_path.exists():

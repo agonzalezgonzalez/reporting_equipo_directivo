@@ -1,6 +1,33 @@
 """
-Página 4: Evolución y Tendencias
-Gráficos temporales, proyecciones y mapa de calor de alertas.
+Página 4: Evolución y Tendencias.
+
+Module: dashboard.pages.3_Evolucion
+Purpose: Gráficos temporales para detectar patrones y anticipar problemas
+    antes de que se conviertan en alertas críticas. Orientada a dirección
+    para análisis de tendencias.
+Input: data/processed/historico_stock.csv (stock teórico, cobertura),
+    data/processed/historico_alertas.csv (mapa calor, ranking),
+    data/processed/historico_consumo.csv (consumo real vs escandallo)
+Output: Interfaz web Streamlit (página de evolución)
+Config: config/settings.yaml (pages.evolucion, paths)
+Used by: Menú lateral del dashboard
+
+Requisito de datos:
+    Esta página depende íntegramente de los archivos históricos CSV
+    generados por run_jobs.py. Si no existen datos históricos (arranque
+    en frío), muestra un mensaje informativo. Los gráficos se vuelven
+    representativos tras 4–6 semanas de ejecuciones.
+
+Componentes visuales:
+    1. Filtros globales: artículo, periodo (12/24 semanas/año), agrupación
+    2. KPIs de tendencia: consumo medio, desviación, cobertura, alertas acumuladas
+    3. Gráfico stock teórico vs mínimo con zona de proyección
+       → Proyección: regresión lineal (numpy.polyfit grado 1) sobre datos
+         del periodo, extrapolada 3 semanas
+    4. Consumo real vs escandallo (líneas superpuestas)
+    5. Evolución de cobertura en semanas (línea con área)
+    6. Mapa de calor alertas × semanas (Plotly heatmap, escala Reds)
+    7. Ranking de recurrencia (top 10 artículos con más alertas acumuladas)
 """
 import sys
 from pathlib import Path
@@ -29,9 +56,21 @@ st.title("📈 Evolución y Tendencias")
 
 processed_dir = PROJECT_ROOT / config["paths"]["processed_data"]
 
-# --- Cargar históricos ---
+
 @st.cache_data(ttl=300)
 def cargar_historicos():
+    """Carga los tres archivos históricos CSV necesarios para esta página.
+
+    Returns:
+        dict con claves "historico_stock", "historico_alertas",
+        "historico_consumo". Cada valor es un pd.DataFrame (vacío si
+        el archivo no existe).
+
+    Dependencies:
+        - Ficheros: data/processed/historico_stock.csv,
+          historico_alertas.csv, historico_consumo.csv
+        - Generados por: run_jobs.py → src.utils.persistence
+    """
     data = {}
     for name in ["historico_stock", "historico_alertas", "historico_consumo"]:
         fpath = processed_dir / f"{name}.csv"
@@ -40,6 +79,7 @@ def cargar_historicos():
         else:
             data[name] = pd.DataFrame()
     return data
+
 
 historicos = cargar_historicos()
 df_stock = historicos["historico_stock"]

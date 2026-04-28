@@ -1,6 +1,30 @@
 """
-Página 5: Proveedores
-Vista por proveedor, fiabilidad, comparativa de precios.
+Página 5: Proveedores.
+
+Module: dashboard.pages.4_Proveedores
+Purpose: Vista centrada en la cadena de suministro. Permite a compras evaluar
+    el rendimiento de cada proveedor, identificar riesgos de dependencia y
+    comparar precios entre proveedores alternativos (SAECO vs XUBER).
+Input: data/raw/EXISTENCIAS_MINIMO.xlsx (lectura en tiempo real vía ETL)
+Output: Interfaz web Streamlit (página de proveedores)
+Config: config/settings.yaml (pages.proveedores, paths)
+Used by: Menú lateral del dashboard
+
+Componentes visuales:
+    1. KPIs: proveedores activos, pedidos en tránsito, entrega media, con riesgo
+    2. Tabla resumen: proveedor, artículos, pendiente recibir, semanas entrega,
+       alertas críticas/riesgo, estado
+       → Estado se calcula: rojo si alertas_criticas > 0, ámbar si riesgo > 0, verde
+    3. Fichas expandibles (st.expander) por proveedor con tabla de artículos
+    4. Gráfico semanas de entrega (barras, coloreado por tramo)
+    5. Gráfico concentración de artículos (barras horizontales)
+       → Alerta de dependencia si proveedor > 25% artículos y > 4 sem entrega
+
+Datos de proveedores:
+    Los nombres de proveedor se obtienen de dos fuentes cruzadas:
+    - Columna nombre_proveedor: cruce del código ERP con tabla interna (filas 57+)
+    - Columna proveedor_habitual: de la hoja CONSUMO SEMANAL col M
+    La tabla resumen agrupa por nombre_proveedor (fuente ERP).
 """
 import sys
 from pathlib import Path
@@ -30,6 +54,18 @@ st.title("🏭 Proveedores")
 
 @st.cache_data(ttl=300)
 def cargar_datos():
+    """Carga el Excel del ERP y ejecuta ETL + alertas. También devuelve la tabla de proveedores.
+
+    Returns:
+        Tupla (df, df_alertas, proveedores):
+        - df (pd.DataFrame | None): DataFrame procesado.
+        - df_alertas (pd.DataFrame | None): Alertas disparadas.
+        - proveedores (pd.DataFrame | None): Tabla de proveedores (filas 57+).
+
+    Dependencies:
+        - Usa: extraer_datos_erp(), transformar_datos(), evaluar_alertas()
+        - Datos de proveedores: extraer_datos_erp()["proveedores"]
+    """
     raw_dir = PROJECT_ROOT / config["paths"]["raw_data"]
     excel_path = raw_dir / config["paths"]["excel_filename"]
     if not excel_path.exists():

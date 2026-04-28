@@ -1,7 +1,34 @@
 """
-Página 6: Panel de Administración
-Configuración de páginas, alertas, destinatarios y parámetros.
-Doble gestión: settings.yaml (base) + panel visual (Streamlit).
+Página 6: Panel de Administración.
+
+Module: dashboard.pages.5_Admin
+Purpose: Permite configurar el comportamiento del dashboard y del sistema de
+    alertas desde una interfaz visual, sin necesidad de editar archivos.
+    Implementa el modelo de doble gestión: settings.yaml como fuente de
+    verdad persistente + panel visual Streamlit para modificarla.
+Input: config/settings.yaml (lectura al cargar)
+Output: config/settings.yaml (escritura al guardar), config/settings.yaml.bak (backup)
+Config: Se autoconfigura leyendo settings.yaml
+Used by: Menú lateral del dashboard (acceso restringido a administradores)
+
+Bloques de configuración:
+    1. Visibilidad de páginas: toggles para activar/desactivar cada página.
+       Panel General siempre visible (disabled=True).
+    2. Configuración de alertas (A1–A10): por cada alerta se puede activar/
+       desactivar en dashboard, en notificaciones, elegir canales y editar
+       la acción recomendada.
+    3. Destinatarios: lista editable con nombre, email, teléfono, niveles
+       de alerta que recibe, canales y toggle de activación temporal.
+       Botón para añadir nuevos destinatarios.
+    4. Parámetros operativos: edición visual de todos los umbrales con
+       controles apropiados (number_input, slider) y validaciones.
+
+Mecanismo de guardado:
+    Al pulsar "Guardar configuración":
+    1. Crea backup settings.yaml.bak
+    2. Escribe los valores actualizados (sin credenciales, que viven en .env)
+    3. Limpia cache de Streamlit para forzar relectura
+    4. Muestra confirmación
 """
 import sys
 from pathlib import Path
