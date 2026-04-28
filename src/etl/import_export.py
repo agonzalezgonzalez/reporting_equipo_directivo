@@ -1,7 +1,31 @@
 """
-Volcado de export.xlsx a la hoja "HOJA EXISTENCIAS" de EXISTENCIAS_MINIMO.xlsx.
-Lee el fichero descargado del ERP y sobreescribe los datos manteniendo
-el formato y estructura del libro destino.
+Volcado de export.xlsx a la hoja HOJA EXISTENCIAS de EXISTENCIAS_MINIMO.xlsx.
+
+Module: src.etl.import_export
+Purpose: Lee el fichero export.xlsx descargado directamente del ERP y
+    vuelca su contenido a la hoja HOJA EXISTENCIAS del libro
+    EXISTENCIAS_MINIMO.xlsx, respetando el formato y estructura
+    existente para no alterar las fórmulas del resto de hojas.
+Input: data/raw/export.xlsx (descarga directa del ERP)
+Output: data/raw/EXISTENCIAS_MINIMO.xlsx (hoja HOJA EXISTENCIAS actualizada)
+Config: config/settings.yaml (paths.export_filename)
+Used by: run_jobs.py (paso 2, antes del ETL)
+
+Estructura de export.xlsx:
+    Fila 1: vacía
+    Fila 2: celda A2 = fecha de actualización del ERP
+    Fila 3: vacía
+    Fila 4: título ("Stock inferior a Mínimo establecido...")
+    Fila 5: vacía
+    Fila 6: cabeceras (Articulo, Denominacion, etc.)
+    Fila 7: separadores ("--------") — se descarta en el volcado
+    Fila 8+: datos de artículos (columnas A-U)
+
+Estructura de HOJA EXISTENCIAS (destino):
+    Fila 2: celda A2 = fecha de actualización
+    Fila 4: título
+    Fila 6: cabeceras
+    Fila 7+: datos de artículos (sin fila de separadores)
 """
 from pathlib import Path
 from datetime import datetime
@@ -23,17 +47,35 @@ MAX_COL = 21             # Columnas A-U
 
 
 def volcar_export(export_path: Path, destino_path: Path) -> bool:
-    """
-    Vuelca los datos de export.xlsx a la hoja "HOJA EXISTENCIAS"
-    de EXISTENCIAS_MINIMO.xlsx.
+    """Vuelca los datos de export.xlsx a HOJA EXISTENCIAS de EXISTENCIAS_MINIMO.xlsx.
 
-    - Copia la fecha de actualización (A2).
-    - Borra todos los datos existentes (fila 7 en adelante).
-    - Escribe los datos del export (desde fila 8, saltando separadores).
-    - Preserva el formato, fórmulas y resto de hojas del libro destino.
+    Proceso paso a paso:
+    1. Copia la fecha de actualización (celda A2) del export al destino.
+    2. Borra todos los datos existentes en HOJA EXISTENCIAS (fila 7 en adelante).
+    3. Lee los datos del export desde la fila 8 (saltando fila 7 de separadores).
+    4. Escribe los datos en el destino a partir de la fila 7.
+    5. Guarda el libro destino preservando formato, fórmulas y resto de hojas.
+
+    La fila 7 del export contiene separadores ("--------") propios del formato
+    de exportación del ERP. Estos se descartan y no se escriben en el destino.
+
+    Solo se copian filas que tienen un código de artículo en la columna B.
+    Las filas vacías o sin artículo se saltan.
+
+    Args:
+        export_path: Ruta al fichero export.xlsx.
+            Normalmente data/raw/export.xlsx.
+        destino_path: Ruta al fichero EXISTENCIAS_MINIMO.xlsx.
+            Normalmente data/raw/EXISTENCIAS_MINIMO.xlsx.
 
     Returns:
-        True si el volcado fue exitoso, False si hubo error.
+        True si el volcado fue exitoso.
+        False si alguno de los ficheros no existe o hubo un error.
+
+    Dependencies:
+        - Llamada por: run_jobs.py (paso 2, condicionado a hay_export_nuevo())
+        - Modifica: EXISTENCIAS_MINIMO.xlsx (hoja HOJA EXISTENCIAS)
+        - Constantes: FILA_FECHA, FILA_DATOS_EXPORT, FILA_DATOS_DESTINO, MAX_COL
     """
     if not export_path.exists():
         logger.info(f"No se encontró {export_path.name}. Se procesará el existente.")
@@ -106,13 +148,31 @@ def volcar_export(export_path: Path, destino_path: Path) -> bool:
 
 
 def hay_export_nuevo(export_path: Path, destino_path: Path) -> bool:
-    """
-    Comprueba si export.xlsx trae datos nuevos comparando la fecha
-    interna del ERP (celda A2) de ambos ficheros.
+    """Comprueba si export.xlsx trae datos nuevos respecto a EXISTENCIAS_MINIMO.xlsx.
+
+    La detección se basa en la comparación de la fecha interna del ERP
+    (celda A2) de ambos ficheros. No usa la fecha de modificación del
+    sistema de archivos, lo que garantiza que:
+    - Si se copia el mismo export dos veces, no se reprocesa.
+    - Si se edita EXISTENCIAS_MINIMO.xlsx manualmente, no se pierde
+      la detección del próximo export.
+
+    Ambas fechas se normalizan a date (sin componente horario) antes
+    de comparar, para evitar falsos positivos por diferencias de hora.
+
+    Args:
+        export_path: Ruta al fichero export.xlsx.
+        destino_path: Ruta al fichero EXISTENCIAS_MINIMO.xlsx.
 
     Returns:
-        True si las fechas son distintas (hay datos nuevos).
-        False si son iguales o si export.xlsx no existe.
+        True si las fechas internas (A2) son distintas → hay datos nuevos.
+        False si son iguales, si export.xlsx no existe, si no tiene
+        fecha en A2, o si ocurre un error de lectura.
+
+    Dependencies:
+        - Llamada por: run_jobs.py (paso 1, antes de volcar_export())
+        - Lee: export.xlsx (celda A2), EXISTENCIAS_MINIMO.xlsx (celda A2)
+        - Constante: FILA_FECHA
     """
     if not export_path.exists():
         return False

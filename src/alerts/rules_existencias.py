@@ -1,6 +1,30 @@
 """
 Motor de reglas de alerta.
-Evalúa las 10 reglas definidas en el documento funcional sobre el DataFrame procesado.
+
+Module: src.alerts.rules_existencias
+Purpose: Evalúa las 10 reglas de alerta (A1–A10) definidas en el documento
+    funcional sobre el DataFrame de artículos procesado. Cada regla compara
+    un valor calculado del artículo contra un umbral configurable y genera
+    un registro de alerta si se cumple la condición.
+Input: DataFrame procesado por src.etl.etl_existencias.transformar_datos()
+Output: DataFrame con una fila por cada alerta disparada
+Config: config/settings.yaml (secciones alerts y params)
+Used by: run_jobs.py (paso 5), dashboard/app_main.py,
+    dashboard/pages/1_Alertas_Activas.py,
+    dashboard/pages/2_Detalle_Articulo.py,
+    dashboard/pages/4_Proveedores.py
+
+Reglas implementadas:
+    A1  (CRITICA)     — Stock cubre menos de N semanas (default 1)
+    A2  (CRITICA)     — Pedido llega después de agotamiento (semana_entrega > semanas_stock)
+    A3  (CRITICA)     — Stock teórico por debajo del mínimo (stock_vs_minimo < 1)
+    A4  (CRITICA)     — Agotamiento estimado en menos de N días (default 30)
+    A5  (RIESGO)      — Pedido en ventana de riesgo sin confirmar recepción (default 24 días)
+    A6  (RIESGO)      — Pedidos pendientes de recibir (en tránsito)
+    A7  (RIESGO)      — Desviación consumo real vs escandallo ≥ N% (default 80%)
+    A8  (INFORMATIVA) — Artículo sin consumo configurado en tabla maestra
+    A9  (INFORMATIVA) — Observaciones contienen la palabra "cambio"
+    A10 (INFORMATIVA) — Sobreestimación del escandallo (desviación ≤ -N%)
 """
 import pandas as pd
 import numpy as np
@@ -25,13 +49,73 @@ ALERT_DEFINITIONS = {
 
 
 def evaluar_alertas(df: pd.DataFrame, config: dict) -> pd.DataFrame:
-    """
-    Evalúa las 10 reglas de alerta sobre el DataFrame procesado.
+    """Evalúa las 10 reglas de alerta sobre el DataFrame procesado.
+
+    Recorre cada artículo del DataFrame y comprueba las condiciones de las
+    alertas A1–A10 según los umbrales definidos en la configuración. Un mismo
+    artículo puede disparar múltiples alertas simultáneamente (ej: A1 y A3).
+
+    Solo genera registros para las alertas que están habilitadas
+    (dashboard_enabled=true en settings.yaml). Las alertas deshabilitadas
+    se ignoran completamente.
+
+    Args:
+        df: DataFrame procesado por transformar_datos() con las columnas
+            calculadas necesarias:
+            - semanas_stock (float): para A1
+            - semana_entrega (float): para A2
+            - stock_vs_minimo (float): para A3
+            - fecha_agotamiento (datetime): para A4
+            - fecha_ultimo_pedido (datetime): para A5
+            - pendiente_recibir (float): para A5, A6
+            - desviacion_consumo (float): para A7, A10
+            - consumo_escandallo (float): para A8
+            - en_tabla_maestra (bool): para A8
+            - observaciones (str): para A9
+            - nombre_proveedor (str): para todas (campo informativo)
+            - fecha_actualizacion (datetime): fecha base para cálculos
+        config: Diccionario de configuración cargado por load_config().
+            Se usan las claves:
+            - params.ventana_riesgo_dias (default: 24)
+            - params.umbral_agotamiento_dias (default: 30)
+            - params.umbral_semanas_stock_critico (default: 1.0)
+            - params.umbral_desviacion_consumo (default: 0.80)
+            - alerts.{A1..A10}.dashboard_enabled (bool)
+            - alerts.{A1..A10}.notification_enabled (bool)
+            - alerts.{A1..A10}.channels (list[str])
+            - alerts.{A1..A10}.action (str)
 
     Returns:
-        DataFrame con una fila por cada alerta disparada.
-        Columnas: fecha, semana, articulo, denominacion, alerta_id, nivel,
-                  nombre, valor, umbral, action, proveedor
+        DataFrame con una fila por cada alerta disparada. Columnas:
+        - fecha (str): fecha de evaluación en formato YYYY-MM-DD
+        - semana (int): número de semana ISO
+        - articulo (str): código del artículo
+        - denominacion (str): nombre del artículo
+        - alerta_id (str): identificador de la alerta (A1–A10)
+        - nivel (str): CRITICA | RIESGO | INFORMATIVA
+        - nombre (str): descripción corta de la alerta
+        - valor (str): dato concreto que disparó la alerta (ej: "0.4 sem")
+        - umbral (str): referencia del umbral (ej: "< 1 sem")
+        - action (str): acción recomendada desde settings.yaml
+        - proveedor (str): nombre del proveedor del artículo
+        - notification_enabled (bool): si la alerta debe generar notificación
+        - channels (list[str]): canales de envío configurados
+        DataFrame vacío con las columnas definidas si no se dispara ninguna alerta.
+
+    Dependencies:
+        - Consume la salida de: src.etl.etl_existencias.transformar_datos()
+        - Configuración: config/settings.yaml (secciones alerts y params)
+        - Usa internamente: _is_enabled(), _build_alert(), ALERT_DEFINITIONS
+        - Consumido por: run_jobs.py (paso 5), dashboard/app_main.py,
+          dashboard/pages/1_Alertas_Activas.py,
+          dashboard/pages/2_Detalle_Articulo.py
+
+    Example:
+        >>> config = load_config()
+        >>> datos = extraer_datos_erp(excel_path)
+        >>> df = transformar_datos(datos, config)
+        >>> df_alertas = evaluar_alertas(df, config)
+        >>> criticas = df_alertas[df_alertas["nivel"] == "CRITICA"]
     """
     params = config.get("params", {})
     alert_config = config.get("alerts", {})
@@ -175,7 +259,20 @@ def evaluar_alertas(df: pd.DataFrame, config: dict) -> pd.DataFrame:
 
 
 def _is_enabled(alert_config: dict, alert_id: str) -> bool:
-    """Comprueba si una alerta está habilitada en dashboard."""
+    """Comprueba si una alerta está habilitada para el dashboard.
+
+    Args:
+        alert_config: Sección 'alerts' del diccionario de configuración.
+        alert_id: Identificador de la alerta (ej: "A1", "A7").
+
+    Returns:
+        True si dashboard_enabled es true o si la alerta no está
+        en la configuración (habilitada por defecto).
+
+    Dependencies:
+        - Llamada por: evaluar_alertas() antes de evaluar cada regla
+        - Lee: config.alerts.{alert_id}.dashboard_enabled
+    """
     return alert_config.get(alert_id, {}).get("dashboard_enabled", True)
 
 
@@ -184,7 +281,47 @@ def _build_alert(
     valor: str, umbral: str, alert_config: dict,
     fecha: datetime, proveedor: str
 ) -> dict:
-    """Construye un registro de alerta."""
+    """Construye un registro de alerta con todos los campos necesarios.
+
+    Combina la información estática de ALERT_DEFINITIONS (nombre, nivel)
+    con la configuración dinámica de settings.yaml (action, notification_enabled,
+    channels) y los datos del artículo que disparó la alerta.
+
+    El campo 'valor' es una representación en texto del dato que disparó la
+    alerta. Su formato varía según el tipo:
+    - A1: "0.4 sem" (semanas de stock)
+    - A2: "Entrega: 3.2 > Stock: 0.4" (comparación semanas)
+    - A3: "-17,269" (diferencia stock teórico - mínimo)
+    - A4: "12/04/2026" (fecha de agotamiento)
+    - A5: "22/03/2026" (fecha del pedido)
+    - A6: "85,050 uds" (cantidad pendiente)
+    - A7: "+87%" (desviación porcentual)
+    - A8: "NULO" (sin consumo)
+    - A9: "cambio" (palabra detectada)
+    - A10: "-84%" (desviación negativa)
+
+    Args:
+        alert_id: Identificador (A1–A10).
+        articulo: Código del artículo.
+        denominacion: Nombre del artículo.
+        valor: Representación en texto del dato que disparó la alerta.
+        umbral: Representación en texto del umbral contra el que se comparó.
+        alert_config: Sección 'alerts' de la configuración.
+        fecha: Fecha de actualización del ERP (datetime).
+        proveedor: Nombre del proveedor del artículo.
+
+    Returns:
+        Diccionario con todos los campos de un registro de alerta,
+        listo para insertarse en el DataFrame de alertas.
+
+    Dependencies:
+        - Llamada por: evaluar_alertas() cuando una condición se cumple
+        - Lee: ALERT_DEFINITIONS, config.alerts.{alert_id}
+        - Su salida se acumula en el DataFrame que devuelve evaluar_alertas()
+        - El campo 'valor' se muestra en: email de alertas (col Valor),
+          dashboard/pages/1_Alertas_Activas.py (col Valor),
+          dashboard/pages/2_Detalle_Articulo.py (lista de alertas)
+    """
     defn = ALERT_DEFINITIONS.get(alert_id, {})
     cfg = alert_config.get(alert_id, {})
     return {
